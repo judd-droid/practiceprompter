@@ -728,7 +728,7 @@
         wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX), {passive:true});
         wrap.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  {passive:true});
         wrap.addEventListener('touchend',   onEnd);
-      }
+      },
 
       renderScripts(){
         const key = fmtISO(this.state.selected);
