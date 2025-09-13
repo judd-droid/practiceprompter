@@ -165,6 +165,49 @@
   </dialog>
 
   <script>
+
+    // Your live endpoint:
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz9OW8GWX2FHTD65r7HyDGZGf2k6szuz9AmT4SwPdPrFjWYCl1OK5KzKOvZ2vIrkHt2qQ/exec";
+  
+    // JSONP helper
+    function fetchJSONP(url) {
+      return new Promise((resolve, reject) => {
+        const cb = `SNPP_CB_${Math.random().toString(36).slice(2)}`;
+        const s = document.createElement('script');
+        const sep = url.includes('?') ? '&' : '?';
+        s.src = `${url}${sep}callback=${cb}`;
+        s.async = true;
+        window[cb] = (data) => { resolve(data); cleanup(); };
+        s.onerror = (e) => { reject(e); cleanup(); };
+        function cleanup(){ delete window[cb]; s.remove(); }
+        document.head.appendChild(s);
+      });
+    }
+  
+    const DATA = {
+      key: 'snpp_remote_v2',
+      async fetch(){
+        // 1) Try normal fetch (works only if server sets CORS)
+        try {
+          const r = await fetch(WEB_APP_URL, { cache: 'no-store' });
+          if (r.ok) {
+            return await r.json();
+          }
+        } catch(_) {} // ignore and fall back to JSONP
+  
+        // 2) JSONP (bypasses CORS)
+        try {
+          return await fetchJSONP(WEB_APP_URL);
+        } catch (e) {
+          console.warn('JSONP failed:', e);
+        }
+  
+        // 3) Local cache fallback
+        try { return JSON.parse(localStorage.getItem(this.key)||'{}'); } catch { return {}; }
+      },
+      setLocal(obj){ localStorage.setItem(this.key, JSON.stringify(obj||{})); }
+    };
+    
     /* --------------------------------------------------
        Remote data loader (Google Apps Script JSON) + M/W/F UI
     -------------------------------------------------- */
