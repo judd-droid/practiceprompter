@@ -42,6 +42,19 @@
     .meta-card{background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; box-shadow:var(--shadow)}
     .meta-tag{font-size:12px; color:var(--sn-gray)}
     .meta-value{font-size:22px; font-weight:800; letter-spacing:.2px; margin-top:4px; word-break:break-word}
+    
+    /* Scenario card uses a smaller, multi-line style */
+    #scenarioName{
+      font-size: clamp(13px, 3.2vw, 15px);  /* smaller than prospect name */
+      line-height: 1.35;
+      font-weight: 700;
+      word-break: break-word;
+      display: -webkit-box;                 /* multi-line clamp */
+      -webkit-line-clamp: 3;                /* show up to 3 lines */
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
 
     /* -------------------------------------------------- Day scroller */
     .date-wrap{margin:12px 0 4px}
