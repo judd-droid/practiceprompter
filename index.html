@@ -64,7 +64,9 @@
     }
     
     /* Pull the date scroller closer to the header */
-    .date-wrap{ margin:6px 0 4px; }
+    .date-wrap{ margin:6px 0 4px; touch-action: pan-y; } /* browser won't hijack horizontal */
+    .days-track{ cursor: grab; }
+    .days-track.dragging{ cursor: grabbing; }
     
     /* If you still see space from an older wrapper around the logo/title */
     .brand{ margin:0; padding:0; }
@@ -676,6 +678,54 @@
           this.renderScripts();
         }, { once:true });
       },
+
+      attachDaysDrag(){
+        const wrap  = document.getElementById('days');
+        const track = document.getElementById('daysTrack');
+        if (!wrap || !track) return;
+      
+        let active = false, startX = 0, dx = 0, width = wrap.clientWidth;
+      
+        const onStart = (x) => {
+          active = true; startX = x; dx = 0; width = wrap.clientWidth;
+          track.classList.add('dragging');
+          track.style.transition = 'none';                // no easing while dragging
+        };
+      
+        const onMove = (x) => {
+          if (!active) return;
+          dx = x - startX;
+          const pct = (dx / width) * 100;                // convert to % of panel width
+          track.style.transform = `translateX(calc(-100% + ${pct}%))`;
+        };
+      
+        const onEnd = () => {
+          if (!active) return;
+          active = false; track.classList.remove('dragging');
+      
+          const THRESH = width * 0.18;                   // ~18% swipe to change week
+          const dir = Math.abs(dx) > THRESH ? (dx < 0 ? +1 : -1) : 0;
+      
+          if (dir === 0) {                               // snap back
+            track.style.transition = 'transform .25s ease';
+            track.style.transform  = 'translateX(-100%)';
+          } else {                                       // commit to next/prev
+            track.style.transition = 'transform .28s ease';
+            this.slideWeek(dir);                         // reuse your existing logic
+          }
+          dx = 0;
+        };
+      
+        // Pointer (covers mouse + touch in modern browsers)
+        wrap.addEventListener('pointerdown', e => { if (e.button!==0) return; onStart(e.clientX); });
+        window.addEventListener('pointermove', e => onMove(e.clientX));
+        window.addEventListener('pointerup',   onEnd);
+      
+        // Touch fallback (older iOS)
+        wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX), {passive:true});
+        wrap.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  {passive:true});
+        wrap.addEventListener('touchend',   onEnd);
+      }
 
       renderScripts(){
         const key = fmtISO(this.state.selected);
