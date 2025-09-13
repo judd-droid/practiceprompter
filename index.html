@@ -37,6 +37,13 @@
     .actions{margin-left:auto}
     .icon-btn{border:none; background:#fff; border:1px solid var(--line); width:36px; height:36px; border-radius:10px; display:grid; place-items:center; box-shadow:var(--shadow); cursor:pointer}
     .gear{width:18px; height:18px; color:var(--sn-gray)}
+    .prospect-name{
+      font-size: 1.375rem;      /* ~22px; was ~24px */
+      line-height: 1.2;
+    }
+    @media (min-width: 768px){
+      .prospect-name{ font-size: 1.75rem; } /* ~28px -> keep it modest on larger screens */
+    }
 
     .meta-grid{
       display:grid;
