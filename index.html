@@ -44,10 +44,10 @@
     /* Logo: no shadows/borders, block-level, zero line-height */
     .header .logo{
       display:block;
-      margin:0 auto;                       /* perfectly centered */
-      line-height:0;                       /* removes stray baseline gap */
-      max-height: clamp(96px, 16vw, 128px); /* was 90px */
-      width:auto;                          /* preserve aspect ratio */
+      margin:0 auto;
+      max-height: clamp(110px, 18vw, 140px);
+      height:auto !important;     /* overrides any attributes */
+      width:auto !important;
       object-fit:contain;
       background:none !important;
       border:none !important;
@@ -72,11 +72,11 @@
     /* Settings button stays pinned */
     .actions{ position:absolute; right:12px; top:8px; }
     
-    /* REMOVE or narrow this generic rule — it’s shrinking the header logo
-    .logo{ width:40px; height:40px; object-fit:contain; display:block; }
-    */
-    /* If you need it elsewhere, scope it: */
-    .toolbar .logo{ width:40px; height:40px; object-fit:contain; display:block; }
+    /* If you still need a small logo somewhere else, scope it: */
+    .toolbar .logo{
+      width:36px; height:36px; object-fit:contain; display:block;
+      border-radius:8px; box-shadow:0 2px 6px rgba(17,24,39,.12);
+    }
 
     .app-title{
       margin:0; font-size:16px; font-weight:800; color:var(--sn-black); letter-spacing:.2px;
@@ -208,7 +208,7 @@
       </div>
     
       <!-- centered logo -->
-      <img src="/supernovacenter.png" class="logo" alt="Supernova Center" width="40" height="40" decoding="async" fetchpriority="high">
+      <img src="/supernovacenter.png" class="logo" alt="Supernova Center">
       <!-- plain black title -->
       <h1 class="app-title">Practice Prompter</h1>
     </div>
