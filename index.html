@@ -216,8 +216,9 @@
     ];
 
     const storage = {
-      load(){ return JSON.parse(localStorage.getItem('snpp_state')||'{}'); },
-      save(s){ localStorage.setItem('snpp_state', JSON.stringify(s)); },
+      key: 'snpp_state_v3',   // <- bump to v3
+      load(){ return JSON.parse(localStorage.getItem(this.key)||'{}'); },
+      save(s){ localStorage.setItem(this.key, JSON.stringify(s)); },
     };
 
     // Week helpers (M/W/F only)
@@ -286,13 +287,18 @@
         // remote: { 'YYYY-MM-DD': { prospect: string, steps: [{p,a}] } }
         Object.entries(this.remote||{}).forEach(([iso, rec])=>{
           if(!this.state.daily[iso]){
-            this.state.daily[iso] = { prospect: rec.prospect||this.randName(), step: 1, done:false };
+            this.state.daily[iso] = { prospect: rec.prospect || this.randName(), step: 1, done:false };
           }
-          // attach steps
+          // Always adopt sheet name when provided and lock it
+          if (rec.prospect && rec.prospect.trim()){
+            this.state.daily[iso].prospect = rec.prospect.trim();
+            this.state.daily[iso]._lockedProspect = true;
+          }
+          // Attach steps
           this.state.daily[iso]._steps = (rec.steps||[]);
         });
         storage.save(this.state);
-      },
+      }
       randName(){ return PROSPECT_NAMES[Math.floor(Math.random()*PROSPECT_NAMES.length)]; },
       ensureDay(key){
         if(!this.state.daily[key]){
@@ -374,8 +380,23 @@
           e.addEventListener('click',()=>{ this.setStep(idx+1); $('#dlg').close(); });
           list.appendChild(e);
         });
+        const d = this.state.daily[key];
+        const locked = !!d._lockedProspect;
+        const shuffleBtn = document.getElementById('shuffleProspect');
+        shuffleBtn.disabled = locked;
+        shuffleBtn.style.opacity = locked ? 0.5 : 1;
+        shuffleBtn.title = locked ? 'Prospect name comes from the sheet' : 'Shuffle name';
       }
     };
+
+    document.getElementById('shuffleProspect').addEventListener('click', () => {
+      const key = fmtISO(this.state.selected);
+      const day = this.state.daily[key];
+      if (day._lockedProspect) return; // fixed by sheet
+      day.prospect = this.randName();
+      storage.save(this.state);
+      this.renderScripts();
+    });
 
     function expandFromArray(arr, idx, prospect, advisor){
       const s = arr[idx-1] || {p:'', a:''};
