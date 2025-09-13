@@ -311,7 +311,7 @@
         });
       
         storage.save(this.state);
-      }
+      },
       randName(){ return PROSPECT_NAMES[(Math.random()*PROSPECT_NAMES.length) | 0]; },
       ensureDay(key){
         if(!this.state.daily[key]){
@@ -344,9 +344,13 @@
         });
         $('#prevWeek').addEventListener('click',()=>{ this.state.selected = addDays(this.state.selected, -7); this.snapToMWF(); this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state); this.renderWeek(); this.renderScripts(); });
         $('#nextWeek').addEventListener('click',()=>{ this.state.selected = addDays(this.state.selected, 7); this.snapToMWF(); this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state); this.renderWeek(); this.renderScripts(); });
-        $('#shuffleProspect').addEventListener('click',()=>{
+        $('#shuffleProspect').addEventListener('click', () => {
           const key = fmtISO(this.state.selected);
-          this.state.daily[key].prospect = this.randName(); storage.save(this.state); this.renderScripts();
+          const d = this.state.daily[key];
+          if (d && d._lockedProspect) return; // name comes from sheet; don't change
+          d.prospect = this.randName();
+          storage.save(this.state);
+          this.renderScripts();
         });
       },
       snapToMWF(){ if(!isMWF(this.state.selected)){ const sw=startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)]; this.state.selected = nearestOf(this.state.selected, opts); } },
@@ -393,7 +397,16 @@
           e.addEventListener('click',()=>{ this.setStep(idx+1); $('#dlg').close(); });
           list.appendChild(e);
         });
-        const d = this.state.daily[key];
+        const list = $('#stepsList'); 
+        list.innerHTML = '';
+        steps.forEach((s, idx) => {
+          const e = document.createElement('div');
+          e.innerHTML = `<span class="idx">${idx+1}</span><span><b>P:</b> ${template(s.p, d.prospect, this.state.advisor)}<br><b>You:</b> ${template(s.a, d.prospect, this.state.advisor)}</span>`;
+          e.addEventListener('click', () => { this.setStep(idx+1); $('#dlg').close(); });
+          list.appendChild(e);
+        });
+        
+        // Lock/disable Shuffle when name comes from sheet
         const locked = !!d._lockedProspect;
         const shuffleBtn = document.getElementById('shuffleProspect');
         shuffleBtn.disabled = locked;
@@ -401,15 +414,6 @@
         shuffleBtn.title = locked ? 'Prospect name comes from the sheet' : 'Shuffle name';
       }
     };
-
-    document.getElementById('shuffleProspect').addEventListener('click', () => {
-      const key = fmtISO(this.state.selected);
-      const day = this.state.daily[key];
-      if (day._lockedProspect) return; // fixed by sheet
-      day.prospect = this.randName();
-      storage.save(this.state);
-      this.renderScripts();
-    });
 
     function expandFromArray(arr, idx, prospect, advisor){
       const s = arr[idx-1] || {p:'', a:''};
