@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <link rel="preload" as="image" href="/supernovacenter.png">
   <title>Supernova Practice Prompter</title>
   <style>
     /* --------------------------------------------------
@@ -77,6 +78,15 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+
+    .logo{
+      width:36px;
+      height:36px;
+      border-radius:8px;          /* use 50% if you want it circular */
+      object-fit:contain;         /* keeps the PNG from stretching */
+      display:block;
+      box-shadow:0 2px 6px rgba(17,24,39,.12);
+    }
     
     /* -------------------------------------------------- Day scroller */
     .date-wrap{margin:12px 0 4px}
@@ -139,7 +149,8 @@
     <!-- Header -->
     <div class="header">
       <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
+        <img class="logo" src="/supernovacenter.png" alt="Supernova" width="36" height="36"
+             decoding="async" fetchpriority="high">
         <h1>Supernova <span class="badge">Practice Prompter</span></h1>
         <div class="actions">
           <button class="icon-btn" id="btnSettings" title="Settings / Reset" aria-label="Settings">
