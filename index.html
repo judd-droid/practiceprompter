@@ -588,28 +588,7 @@
           area.addEventListener('pointerdown', e=> start(e.clientX, e.clientY));
           area.addEventListener('pointerup',   e=> end(e.clientX, e.clientY));
         })();
-      }
-      
-      // Swipe → slide (reuse your existing detector, just call slideWeek)
-      (function enableWeekSwipe(){
-        const area = document.querySelector('.date-wrap');
-        if (!area) return;
-        const THRESH_X = 40, LIMIT_Y = 60;
-        let sx=0, sy=0, tracking=false;
-      
-        const start = (x,y)=>{ sx=x; sy=y; tracking=true; };
-        const end   = (x,y)=>{
-          if(!tracking) return; tracking=false;
-          const dx=x-sx, dy=y-sy;
-          if(Math.abs(dx)>THRESH_X && Math.abs(dy)<LIMIT_Y){
-            if(dx<0) app.slideWeek(1); else app.slideWeek(-1);
-          }
-        };
-        area.addEventListener('touchstart', e=> start(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
-        area.addEventListener('touchend',   e=> end(e.changedTouches[0].clientX, e.changedTouches[0].clientY), {passive:true});
-        area.addEventListener('pointerdown', e=> start(e.clientX, e.clientY));
-        area.addEventListener('pointerup',   e=> end(e.clientX, e.clientY));
-      })();
+      },
 
       },
       snapToMWF(){ if(!isMWF(this.state.selected)){ const sw=startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)]; this.state.selected = nearestOf(this.state.selected, opts); } },
