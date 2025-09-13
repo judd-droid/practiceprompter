@@ -220,6 +220,9 @@
       save(s){ localStorage.setItem(this.key, JSON.stringify(s)); },
     };
 
+    // Parse "YYYY-MM-DD" into a LOCAL date (no UTC shift)
+    const parseISO = (iso) => { const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); };
+
     // Week helpers (M/W/F only)
     const monIndex = d => (d.getDay()+6)%7; // Monday=0..Sunday=6
     const startOfWeekMon = d => { const s=new Date(d); s.setHours(0,0,0,0); s.setDate(s.getDate()-monIndex(s)); return s; };
@@ -287,14 +290,8 @@
       async init(){
         const saved = storage.load();
         this.state = Object.assign({ advisor:'Jen', selected: new Date(), daily:{} }, saved);
-        // Clamp to a safe (non-future) M/W/F
-        this.state.selected = selectSafe(this.state.selected);
-        // M/W/F snapping
-        if(!isMWF(this.state.selected)){
-          const sw = startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)];
-          this.state.selected = nearestOf(this.state.selected, opts);
-        }
-        // Try load remote JSON → hydrate
+        
+        // Load remote JSON → hydrate
         try {
           const json = await DATA.fetch();
           DATA.setLocal(json);
@@ -303,47 +300,79 @@
           this.remote = DATA.getLocal();
         }
         this.hydrateFromRemote();
-        this.ensureDay(fmtISO(this.state.selected));
+        
+        // Pick a real date from the sheet (not future). Prefer saved selection; else today; else earliest.
+        const prefer = this.state.selected || new Date();
+        const picked = this.nearestValidNotAfter(prefer) || this.nearestValidNotAfter(new Date());
+        this.state.selected = picked || todayLocal();  // last resort: today (will show "Locked – future" if needed)
+        
         this.renderWeek();
         this.bind();
         this.renderScripts();
       },
       hydrateFromRemote(){
-        // remote: { 'YYYY-MM-DD': { prospect: string, steps: [{p,a}] } }
+        // remote: { 'YYYY-MM-DD': { prospect, steps:[{p,a}] } }
+        this.validSet = new Set();      // fast membership check by ISO string
+        this.validDates = [];           // Date[] (local midnight), sorted asc
+      
         const src = this.remote || {};
         Object.keys(src).forEach(iso => {
           const rec = src[iso] || {};
+          this.validSet.add(iso);
+          this.validDates.push(atMidnight(parseISO(iso)));
       
-          // Create the day record if missing
           if (!this.state.daily[iso]) {
             this.state.daily[iso] = {
               prospect: (rec.prospect && String(rec.prospect).trim())
                 ? String(rec.prospect).trim()
-                : this.randName(),                 // << ensure the dot is here
+                : 'Prospect',
               step: 1,
               done: false
             };
           }
-      
-          // Always adopt sheet name when provided and lock it
-          if (rec.prospect && String(rec.prospect).trim()){
+          // Lock sheet name & attach steps
+          if (rec.prospect && String(rec.prospect).trim()) {
             this.state.daily[iso].prospect = String(rec.prospect).trim();
             this.state.daily[iso]._lockedProspect = true;
           }
-      
-          // Attach steps array (or empty)
           this.state.daily[iso]._steps = Array.isArray(rec.steps) ? rec.steps : [];
         });
       
+        // sort and keep only non-future for navigation
+        this.validDates.sort((a,b)=> a - b);
+        this.validPastDates = this.validDates.filter(d => !isFutureDate(d));
+      
         storage.save(this.state);
       },
-      randName(){ return PROSPECT_NAMES[(Math.random()*PROSPECT_NAMES.length) | 0]; },
-      ensureDay(key){
-        if(!this.state.daily[key]){
-          this.state.daily[key] = { prospect:this.randName(), step:1, done:false };
-          storage.save(this.state);
+      nearestValidNotAfter(date){
+        const t = +atMidnight(date);
+        let pick = null;
+        for (const d of this.validPastDates) {
+          const ms = +d;
+          if (ms <= t) pick = d; else break;
         }
+        // if none <= t, pick earliest available
+        return pick || this.validPastDates[0] || null;
       },
+      prevValid(date){
+        const t = +atMidnight(date);
+        let prev = null;
+        for (const d of this.validPastDates) {
+          const ms = +d;
+          if (ms < t) prev = d; else if (ms === t) break; else break;
+        }
+        return prev;
+      },
+      nextValid(date){
+        const t = +atMidnight(date);
+        for (const d of this.validPastDates) {
+          const ms = +d;
+          if (ms > t) return d;
+        }
+        return null;
+      },
+
+      randName(){ return PROSPECT_NAMES[(Math.random()*PROSPECT_NAMES.length) | 0]; },
       get day(){ return this.state.daily[fmtISO(this.state.selected)]; },
       currentSteps(){
         const d = this.day; const steps = (d && d._steps && d._steps.length)? d._steps : FALLBACK;
@@ -368,17 +397,18 @@
           if(name!==null){ this.state.advisor = name.trim()||'Jen'; storage.save(this.state); this.renderScripts(); }
         });
         $('#prevWeek').addEventListener('click', () => {
-          this.state.selected = selectSafe(addDays(this.state.selected, -7));
-          this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
+          const prev = this.prevValid(this.state.selected);
+          if (!prev) return;                               // no earlier sheet date
+          this.state.selected = prev;
+          storage.save(this.state);
           this.renderWeek(); this.renderScripts();
         });
         
         $('#nextWeek').addEventListener('click', () => {
-          const next = selectSafe(addDays(this.state.selected, 7));
-          // If the next week is fully in the future, selectSafe snaps back; no-op.
-          if (fmtISO(next) === fmtISO(this.state.selected)) return;
+          const next = this.nextValid(this.state.selected);
+          if (!next) return;                               // either none or future-only
           this.state.selected = next;
-          this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
+          storage.save(this.state);
           this.renderWeek(); this.renderScripts();
         });
       },
@@ -389,22 +419,32 @@
         this.renderDays();
       },
       renderDays(){
-        const wrap=$('#days'); wrap.innerHTML='';
-        const center = new Date(this.state.selected); center.setHours(0,0,0,0);
+        const wrap = $('#days'); wrap.innerHTML = '';
+        const center = atMidnight(this.state.selected);
         const sw = startOfWeekMon(center);
-        const slots = [sw, addDays(sw,2), addDays(sw,4)]; // M, W, F
-        const today = new Date(); today.setHours(0,0,0,0);
-        slots.forEach(t=>{
-          const key = fmtISO(t); this.ensureDay(key);
-          const day = this.state.daily[key];
-          const isFuture = t.getTime()>today.getTime();
+        const slots = [sw, addDays(sw,2), addDays(sw,4)]; // M/W/F
+        const today = todayLocal();
+      
+        slots.forEach(t => {
+          const key = fmtISO(t);
+          const hasData = this.validSet && this.validSet.has(key);
+          const isFuture = t.getTime() > today.getTime();
+          const disabled = !hasData || isFuture;
           const isCurrent = sameDay(t, this.state.selected);
+      
           const el = document.createElement('button');
-          el.className = 'day '+(isFuture?'future':'past')+(isCurrent?' current':'');
-          el.innerHTML = `<span class="dow">${t.toLocaleDateString(undefined,{weekday:'short'})}</span>
-                          <span class="num">${t.getDate()}</span>
-                          <span class="check ${day.done?'ok':'pending'}">${day.done?'✓':''}</span>`;
-          if(!isFuture){ el.onclick = ()=>{ this.state.selected = t; storage.save(this.state); this.renderWeek(); this.renderScripts(); }; }
+          el.className = 'day ' + (disabled?'future':'past') + (isCurrent?' current':'');
+          const done = hasData && this.state.daily[key] && this.state.daily[key].done;
+      
+          el.innerHTML = `
+            <span class="dow">${t.toLocaleDateString(undefined,{weekday:'short'})}</span>
+            <span class="num">${t.getDate()}</span>
+            <span class="check ${done?'ok':'pending'}">${done?'✓':''}</span>
+          `;
+      
+          if (!disabled) {
+            el.onclick = () => { this.state.selected = t; storage.save(this.state); this.renderWeek(); this.renderScripts(); };
+          }
           wrap.appendChild(el);
         });
       },
@@ -412,6 +452,19 @@
         const key = fmtISO(this.state.selected);
         const d = this.state.daily[key];
         const sel = atMidnight(this.state.selected);
+
+        // If the date has no data in the sheet, show a friendly lock
+        if (!this.validSet || !this.validSet.has(key)) {
+          $('#prospectName').textContent = '“No script for this date”';
+          $('#lineProspect').textContent = 'There’s no practice script in the Sheet for this day.';
+          $('#lineAdvisor').textContent  = '';
+          $('#stepNow').textContent = '–';
+          $('#bar').style.width = '0%';
+          $('#btnBack').disabled = true;
+          $('#btnNext').disabled = true;
+          $('#stepsList').innerHTML = '';
+          return;
+        }
       
         if (isFutureDate(sel)) {
           $('#prospectName').textContent = '“Locked – future date”';
