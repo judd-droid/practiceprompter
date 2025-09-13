@@ -159,7 +159,7 @@
     <section class="meta-grid">
       <div class="meta-card">
         <div class="meta-tag">Today’s Prospect</div>
-        <div class="meta-value" id="prospectName">“Benjie”</div>
+        <div class="meta-value" id="prospectName">Benjie</div>
       </div>
       <div class="meta-card">
         <div class="meta-tag">Practice Scenario</div>
@@ -252,6 +252,8 @@
       'Benjie','Mara','Paolo','Ava','Rico','Shiela','Anton','Grace','Loren','JR',
       'Allan','Sandy','Gio','Migs','Kara','Dane','Rhea','Gail','Ivan','Nika'
     ];
+
+    const cleanName = s => String(s || '').trim().replace(/^["'“”]+|["'“”]+$/g,'');
 
     const storage = {
       key: 'snpp_state_v3',   // <- bump to v3
@@ -528,11 +530,11 @@
           return;
         }
 
-        $('#prospectName').textContent = `“${d.prospect}”`;
+        $('#prospectName').textContent = `${d.prospect}`;
         $('#scenarioName').textContent = d.scenario?.trim() || '—';
         $('#scenarioName').title = d.scenario || '';
         
-        $('#prospectName').textContent = `“${d.prospect}”`;
+        $('#prospectName').textContent = cleanName(d.prospect);
         const steps = this.currentSteps();
         const pair = expandFromArray(steps, d.step, d.prospect);
         $('#lineProspect').textContent = pair.p;
