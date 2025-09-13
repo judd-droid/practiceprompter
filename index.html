@@ -252,30 +252,30 @@
       {p:'Auto‑debit works. Proceed na.', a:'Awesome—I’ll prep the application and send the Zoom invite. Thank you, {PROSPECT}!'}
     ];
 
-    const todayLocal = () => { const t = new Date(); t.setHours(0,0,0,0); return t; };
-    const isFutureDate = d => d.getTime() > todayLocal().getTime();
+    const atMidnight = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+    const todayLocal = () => atMidnight(new Date());
+    const isFutureDate = (d) => atMidnight(d).getTime() > todayLocal().getTime();
     
-    // Return nearest Mon/Wed/Fri for a given date
     function snapMWF(d){
-      const sw = startOfWeekMon(d);
+      const base = atMidnight(d);
+      const sw = startOfWeekMon(base);
       const opts = [sw, addDays(sw,2), addDays(sw,4)];
-      // pick the closest by absolute distance
-      return opts.reduce((best,curr)=> Math.abs(curr - d) < Math.abs(best - d) ? curr : best, opts[0]);
+      // pick absolute nearest
+      return opts.reduce((best,curr)=> Math.abs(curr-base) < Math.abs(best-base) ? curr : best, opts[0]);
     }
     
-    // Select a date but never allow future days
+    /** Select a date but never allow future days. If target week is fully future,
+     *  clamp to the latest allowed day (or today). Always return an M/W/F. */
     function selectSafe(date){
-      let t = new Date(date); t.setHours(0,0,0,0);
-      t = snapMWF(t);
+      let t = snapMWF(date);
       if (isFutureDate(t)) {
-        // choose the latest non-future M/W/F within that week; if none, clamp to today
         const sw = startOfWeekMon(t);
         const candidates = [sw, addDays(sw,2), addDays(sw,4)].filter(x => !isFutureDate(x));
         t = candidates.length ? candidates[candidates.length-1] : todayLocal();
+        t = snapMWF(t); // ensure M/W/F even after clamping
       }
-      return t;
+      return atMidnight(t);
     }
-
 
     function template(str, prospect, advisor){
       return str.replaceAll('{PROSPECT}', prospect).replaceAll('{ADVISOR}', advisor);
@@ -372,10 +372,10 @@
           this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
           this.renderWeek(); this.renderScripts();
         });
+        
         $('#nextWeek').addEventListener('click', () => {
-          // will clamp to latest allowed day if next week is fully in the future
           const next = selectSafe(addDays(this.state.selected, 7));
-          // if clamped didn’t move (still same day), do nothing (week is locked)
+          // If the next week is fully in the future, selectSafe snaps back; no-op.
           if (fmtISO(next) === fmtISO(this.state.selected)) return;
           this.state.selected = next;
           this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
@@ -409,22 +409,22 @@
         });
       },
       renderScripts(){
-          const key = fmtISO(this.state.selected);
-          const d = this.state.daily[key];
-          const sel = new Date(this.state.selected); sel.setHours(0,0,0,0);
+        const key = fmtISO(this.state.selected);
+        const d = this.state.daily[key];
+        const sel = atMidnight(this.state.selected);
+      
+        if (isFutureDate(sel)) {
+          $('#prospectName').textContent = '“Locked – future date”';
+          $('#lineProspect').textContent = 'This practice script unlocks on that date.';
+          $('#lineAdvisor').textContent  = '';
+          $('#stepNow').textContent = '–';
+          $('#bar').style.width = '0%';
+          $('#btnBack').disabled = true;
+          $('#btnNext').disabled = true;
+          $('#stepsList').innerHTML = '';
+          return;
+        }
         
-          // lock view if somehow future
-          if (isFutureDate(sel)) {
-            $('#prospectName').textContent = '“Locked – future date”';
-            $('#lineProspect').textContent = 'This practice script unlocks on that date.';
-            $('#lineAdvisor').textContent  = '';
-            $('#stepNow').textContent = '–';
-            $('#bar').style.width = '0%';
-            $('#btnBack').disabled = true;
-            $('#btnNext').disabled = true;
-            $('#stepsList').innerHTML = '';
-            return;
-          }
         $('#prospectName').textContent = `“${d.prospect}”`;
         const steps = this.currentSteps();
         const pair = expandFromArray(steps, d.step, d.prospect, this.state.advisor||'Jen');
