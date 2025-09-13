@@ -738,30 +738,20 @@
         wrap.addEventListener('touchend',   onEnd);
       },
 
-      dayCenterOffsetPct(d = this.state.selected) {
-        // 3 columns: Mon | Wed | Fri. Center is Wed.
-        // To center Mon, shift +33.333%; to center Fri, shift -33.333%.
-        const dow = d.getDay(); // Mon=1 ... Fri=5
-        if (dow === 1) return 33.3333;   // Monday
-        if (dow === 5) return -33.3333;  // Friday
-        return 0;                        // Wednesday
-      },
-      basePct() {
-        return -100 + this.dayCenterOffsetPct(); // -100% is the middle panel
-      },
-
+      // default state (add slot: 0)
+      state: { advisor: 'Jen', selected: new Date(), slot: 0, daily: {} },
+      
       slotWidthPct: 33.3333,
       dayCenterOffsetPct(d = this.state.selected) {
-        const dow = d.getDay();         // Mon=1 ... Fri=5
-        if (dow === 1) return  33.3333; // center Monday
-        if (dow === 5) return -33.3333; // center Friday
-        return 0;                        // center Wednesday
+        const dow = d.getDay();            // Mon=1, Wed=3, Fri=5
+        return dow === 1 ?  33.3333        // center Monday
+             : dow === 5 ? -33.3333        // center Friday
+             : 0;                          // center Wednesday
       },
       basePct() {
-        // panel center (-100%) + which day to center + which slot (L=−1,C=0,R=+1; allow ±2)
+        // panel center (-100%) + which day is centered + in-week slot (L=-1,C=0,R=+1)
         return -100 + this.dayCenterOffsetPct() + (this.state.slot || 0) * this.slotWidthPct;
       },
-
 
       renderScripts(){
         const key = fmtISO(this.state.selected);
