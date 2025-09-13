@@ -125,7 +125,6 @@
     <!-- Prospect Name -->
     <section class="prospect">
       <span class="tag">Today’s Prospect</span>
-      <div class="chip" id="shuffleProspect" title="Shuffle name">Shuffle</div>
     </section>
     <div class="prospect-name" id="prospectName">“Benjie”</div>
 
@@ -253,6 +252,31 @@
       {p:'Auto‑debit works. Proceed na.', a:'Awesome—I’ll prep the application and send the Zoom invite. Thank you, {PROSPECT}!'}
     ];
 
+    const todayLocal = () => { const t = new Date(); t.setHours(0,0,0,0); return t; };
+    const isFutureDate = d => d.getTime() > todayLocal().getTime();
+    
+    // Return nearest Mon/Wed/Fri for a given date
+    function snapMWF(d){
+      const sw = startOfWeekMon(d);
+      const opts = [sw, addDays(sw,2), addDays(sw,4)];
+      // pick the closest by absolute distance
+      return opts.reduce((best,curr)=> Math.abs(curr - d) < Math.abs(best - d) ? curr : best, opts[0]);
+    }
+    
+    // Select a date but never allow future days
+    function selectSafe(date){
+      let t = new Date(date); t.setHours(0,0,0,0);
+      t = snapMWF(t);
+      if (isFutureDate(t)) {
+        // choose the latest non-future M/W/F within that week; if none, clamp to today
+        const sw = startOfWeekMon(t);
+        const candidates = [sw, addDays(sw,2), addDays(sw,4)].filter(x => !isFutureDate(x));
+        t = candidates.length ? candidates[candidates.length-1] : todayLocal();
+      }
+      return t;
+    }
+
+
     function template(str, prospect, advisor){
       return str.replaceAll('{PROSPECT}', prospect).replaceAll('{ADVISOR}', advisor);
     }
@@ -263,7 +287,8 @@
       async init(){
         const saved = storage.load();
         this.state = Object.assign({ advisor:'Jen', selected: new Date(), daily:{} }, saved);
-        this.state.selected = new Date(this.state.selected || Date.now());
+        // Clamp to a safe (non-future) M/W/F
+        this.state.selected = selectSafe(this.state.selected);
         // M/W/F snapping
         if(!isMWF(this.state.selected)){
           const sw = startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)];
@@ -342,15 +367,19 @@
           const name = prompt('Your name for the scripts (default Jen):', this.state.advisor||'Jen');
           if(name!==null){ this.state.advisor = name.trim()||'Jen'; storage.save(this.state); this.renderScripts(); }
         });
-        $('#prevWeek').addEventListener('click',()=>{ this.state.selected = addDays(this.state.selected, -7); this.snapToMWF(); this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state); this.renderWeek(); this.renderScripts(); });
-        $('#nextWeek').addEventListener('click',()=>{ this.state.selected = addDays(this.state.selected, 7); this.snapToMWF(); this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state); this.renderWeek(); this.renderScripts(); });
-        $('#shuffleProspect').addEventListener('click', () => {
-          const key = fmtISO(this.state.selected);
-          const d = this.state.daily[key];
-          if (d && d._lockedProspect) return; // name comes from sheet; don't change
-          d.prospect = this.randName();
-          storage.save(this.state);
-          this.renderScripts();
+        $('#prevWeek').addEventListener('click', () => {
+          this.state.selected = selectSafe(addDays(this.state.selected, -7));
+          this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
+          this.renderWeek(); this.renderScripts();
+        });
+        $('#nextWeek').addEventListener('click', () => {
+          // will clamp to latest allowed day if next week is fully in the future
+          const next = selectSafe(addDays(this.state.selected, 7));
+          // if clamped didn’t move (still same day), do nothing (week is locked)
+          if (fmtISO(next) === fmtISO(this.state.selected)) return;
+          this.state.selected = next;
+          this.ensureDay(fmtISO(this.state.selected)); storage.save(this.state);
+          this.renderWeek(); this.renderScripts();
         });
       },
       snapToMWF(){ if(!isMWF(this.state.selected)){ const sw=startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)]; this.state.selected = nearestOf(this.state.selected, opts); } },
@@ -380,7 +409,22 @@
         });
       },
       renderScripts(){
-        const key = fmtISO(this.state.selected); const d = this.state.daily[key];
+          const key = fmtISO(this.state.selected);
+          const d = this.state.daily[key];
+          const sel = new Date(this.state.selected); sel.setHours(0,0,0,0);
+        
+          // lock view if somehow future
+          if (isFutureDate(sel)) {
+            $('#prospectName').textContent = '“Locked – future date”';
+            $('#lineProspect').textContent = 'This practice script unlocks on that date.';
+            $('#lineAdvisor').textContent  = '';
+            $('#stepNow').textContent = '–';
+            $('#bar').style.width = '0%';
+            $('#btnBack').disabled = true;
+            $('#btnNext').disabled = true;
+            $('#stepsList').innerHTML = '';
+            return;
+          }
         $('#prospectName').textContent = `“${d.prospect}”`;
         const steps = this.currentSteps();
         const pair = expandFromArray(steps, d.step, d.prospect, this.state.advisor||'Jen');
@@ -403,9 +447,6 @@
         // Lock/disable Shuffle when name comes from sheet
         const locked = !!d._lockedProspect;
         const shuffleBtn = document.getElementById('shuffleProspect');
-        shuffleBtn.disabled = locked;
-        shuffleBtn.style.opacity = locked ? 0.5 : 1;
-        shuffleBtn.title = locked ? 'Prospect name comes from the sheet' : 'Shuffle name';
       }
     };
 
