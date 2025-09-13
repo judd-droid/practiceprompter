@@ -312,7 +312,7 @@
       
         storage.save(this.state);
       }
-      randName(){ return PROSPECT_NAMES[Math.floor(Math.random()*PROSPECT_NAMES.length)]; },
+      randName(){ return PROSPECT_NAMES[(Math.random()*PROSPECT_NAMES.length) | 0]; },
       ensureDay(key){
         if(!this.state.daily[key]){
           this.state.daily[key] = { prospect:this.randName(), step:1, done:false };
