@@ -233,7 +233,7 @@
 
     // Fallback local script bank (only used if remote missing for a date)
     const FALLBACK = [
-      {p:'Hello?', a:'Hi {PROSPECT}, this is {ADVISOR} from AIA. Do you have a quick minute? (today or tomorrow evening?)'},
+      { p:'Hello?', a:'Hi {PROSPECT}, this is from AIA. Do you have a quick minute? (today or tomorrow evening?)' },
       {p:'What is this about?', a:'I help families set up affordable protection and health plans. Can I share a quick overview?'},
       {p:'I already have insurance.', a:'Great! When was your last review? We can check if everything still fits—30 mins lang.'},
       {p:'Busy ako ngayon.', a:'I get it. Would Friday or Saturday work better? (morning or evening?)'},
@@ -280,8 +280,14 @@
       return atMidnight(t);
     }
 
-    function template(str, prospect, advisor){
-      return str.replaceAll('{PROSPECT}', prospect).replaceAll('{ADVISOR}', advisor);
+    function template(str, prospect){
+      const out = String(str || '')
+        .replaceAll('{PROSPECT}', prospect || '')
+        .replaceAll('{ADVISOR}', '')                 // strip advisor token if it appears
+        .replace(/\s{2,}/g, ' ')                     // collapse double spaces
+        .replace(/\s+([,.;:!?])/g, '$1')             // trim space before punctuation
+        .trim();
+      return out;
     }
 
     const app = {
@@ -392,9 +398,8 @@
         $('#btnList').addEventListener('click',()=> $('#dlg').showModal());
         $('#btnRestart').addEventListener('click',()=>{ this.setStep(1); $('#dlg').close();});
         $('#btnMarkDone').addEventListener('click',()=>{ this.day.done=true; this.day.step=this.currentSteps().length; storage.save(this.state); this.renderScripts(); this.renderDays(); $('#dlg').close(); });
-        $('#btnSettings').addEventListener('click',()=>{
-          const name = prompt('Your name for the scripts (default Jen):', this.state.advisor||'Jen');
-          if(name!==null){ this.state.advisor = name.trim()||'Jen'; storage.save(this.state); this.renderScripts(); }
+        $('#btnSettings').addEventListener('click', () => {
+          if (confirm('Reset local progress?')) { localStorage.clear(); location.reload(); }
         });
         $('#prevWeek').addEventListener('click', () => {
           const prev = this.prevValid(this.state.selected);
@@ -480,7 +485,7 @@
         
         $('#prospectName').textContent = `“${d.prospect}”`;
         const steps = this.currentSteps();
-        const pair = expandFromArray(steps, d.step, d.prospect, this.state.advisor||'Jen');
+        const pair = expandFromArray(steps, d.step, d.prospect);
         $('#lineProspect').textContent = pair.p;
         $('#lineAdvisor').textContent = pair.a;
         $('#stepNow').textContent = d.step;
@@ -492,7 +497,7 @@
         list.innerHTML = '';
         steps.forEach((s, idx) => {
           const e = document.createElement('div');
-          e.innerHTML = `<span class="idx">${idx+1}</span><span><b>P:</b> ${template(s.p, d.prospect, this.state.advisor)}<br><b>You:</b> ${template(s.a, d.prospect, this.state.advisor)}</span>`;
+          e.innerHTML = `<span class="idx">${idx+1}</span><span><b>P:</b> ${template(s.p, d.prospect)}<br><b>You:</b> ${template(s.a, d.prospect)}</span>`;
           e.addEventListener('click', () => { this.setStep(idx+1); $('#dlg').close(); });
           list.appendChild(e);
         });
@@ -503,9 +508,9 @@
       }
     };
 
-    function expandFromArray(arr, idx, prospect, advisor){
+    function expandFromArray(arr, idx, prospect){
       const s = arr[idx-1] || {p:'', a:''};
-      return { p: template(s.p||'', prospect, advisor), a: template(s.a||'', prospect, advisor) };
+      return { p: template(s.p, prospect), a: template(s.a, prospect) };
     }
 
     // Boot
