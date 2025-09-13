@@ -285,18 +285,31 @@
       },
       hydrateFromRemote(){
         // remote: { 'YYYY-MM-DD': { prospect: string, steps: [{p,a}] } }
-        Object.entries(this.remote||{}).forEach(([iso, rec])=>{
-          if(!this.state.daily[iso]){
-            this.state.daily[iso] = { prospect: rec.prospect || this.randName(), step: 1, done:false };
+        const src = this.remote || {};
+        Object.keys(src).forEach(iso => {
+          const rec = src[iso] || {};
+      
+          // Create the day record if missing
+          if (!this.state.daily[iso]) {
+            this.state.daily[iso] = {
+              prospect: (rec.prospect && String(rec.prospect).trim())
+                ? String(rec.prospect).trim()
+                : this.randName(),                 // << ensure the dot is here
+              step: 1,
+              done: false
+            };
           }
+      
           // Always adopt sheet name when provided and lock it
-          if (rec.prospect && rec.prospect.trim()){
-            this.state.daily[iso].prospect = rec.prospect.trim();
+          if (rec.prospect && String(rec.prospect).trim()){
+            this.state.daily[iso].prospect = String(rec.prospect).trim();
             this.state.daily[iso]._lockedProspect = true;
           }
-          // Attach steps
-          this.state.daily[iso]._steps = (rec.steps||[]);
+      
+          // Attach steps array (or empty)
+          this.state.daily[iso]._steps = Array.isArray(rec.steps) ? rec.steps : [];
         });
+      
         storage.save(this.state);
       }
       randName(){ return PROSPECT_NAMES[Math.floor(Math.random()*PROSPECT_NAMES.length)]; },
