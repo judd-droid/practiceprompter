@@ -618,10 +618,9 @@
         track.appendChild(this.buildWeekPanel(nextStart));
       
         track.style.transition = 'none';
-        track.style.transform  = 'translateX(-100%)';
-
-        this.attachDaysDrag();
-        
+        track.style.transform  = `translateX(${this.basePct()}%)`;  // <— use base
+        this.attachDaysDrag();                                      // keep this
+      
         requestAnimationFrame(()=> track.style.transition = 'transform .28s ease');
       },
       
@@ -662,18 +661,21 @@
       
         const candidate = addDays(this.state.selected, dir*7);
         const allowed   = this.nearestValidNotAfter(candidate);
+        const base      = this.basePct();
       
         if (!allowed || fmtISO(allowed) === fmtISO(this.state.selected)) {
+          // bounce a little around the base
           track.style.transition = 'transform .15s ease';
-          track.style.transform  = `translateX(${dir===1?-110:-90}%)`;
+          track.style.transform  = `translateX(${base + (dir===1?-10:10)}%)`;
           setTimeout(()=>{
             track.style.transition = 'transform .15s ease';
-            track.style.transform  = 'translateX(-100%)';
+            track.style.transform  = `translateX(${base}%)`;
           }, 140);
           return;
         }
       
-        track.style.transform = `translateX(${dir===1?-200:0}%)`;
+        // animate exactly one panel from wherever the base is
+        track.style.transform = `translateX(${base + (dir===1 ? -100 : 100)}%)`;
         track.addEventListener('transitionend', () => {
           this.state.selected = allowed;
           storage.save(this.state);
@@ -687,47 +689,58 @@
         const track = document.getElementById('daysTrack');
         if (!wrap || !track) return;
       
-        let active = false, startX = 0, dx = 0, width = wrap.clientWidth;
+        let active = false, startX = 0, dx = 0, width = wrap.clientWidth, base = this.basePct();
       
         const onStart = (x) => {
           active = true; startX = x; dx = 0; width = wrap.clientWidth;
+          base = this.basePct();                           // <— recompute base
           track.classList.add('dragging');
-          track.style.transition = 'none';                // no easing while dragging
+          track.style.transition = 'none';
         };
       
         const onMove = (x) => {
           if (!active) return;
           dx = x - startX;
-          const pct = (dx / width) * 100;                // convert to % of panel width
-          track.style.transform = `translateX(calc(-100% + ${pct}%))`;
+          const pct = (dx / width) * 100;                 // how much of a panel we moved
+          track.style.transform = `translateX(${base + pct}%)`;
         };
       
         const onEnd = () => {
           if (!active) return;
           active = false; track.classList.remove('dragging');
       
-          const THRESH = width * 0.18;                   // ~18% swipe to change week
+          const THRESH = width * 0.18;
           const dir = Math.abs(dx) > THRESH ? (dx < 0 ? +1 : -1) : 0;
       
-          if (dir === 0) {                               // snap back
+          if (dir === 0) {
             track.style.transition = 'transform .25s ease';
-            track.style.transform  = 'translateX(-100%)';
-          } else {                                       // commit to next/prev
+            track.style.transform  = `translateX(${base}%)`;       // snap back to base
+          } else {
             track.style.transition = 'transform .28s ease';
-            this.slideWeek(dir);                         // reuse your existing logic
+            this.slideWeek(dir);                                    // commit
           }
           dx = 0;
         };
       
-        // Pointer (covers mouse + touch in modern browsers)
         wrap.addEventListener('pointerdown', e => { if (e.button!==0) return; onStart(e.clientX); });
         window.addEventListener('pointermove', e => onMove(e.clientX));
         window.addEventListener('pointerup',   onEnd);
       
-        // Touch fallback (older iOS)
         wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX), {passive:true});
         wrap.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  {passive:true});
         wrap.addEventListener('touchend',   onEnd);
+      },
+
+      dayCenterOffsetPct(d = this.state.selected) {
+        // 3 columns: Mon | Wed | Fri. Center is Wed.
+        // To center Mon, shift +33.333%; to center Fri, shift -33.333%.
+        const dow = d.getDay(); // Mon=1 ... Fri=5
+        if (dow === 1) return 33.3333;   // Monday
+        if (dow === 5) return -33.3333;  // Friday
+        return 0;                        // Wednesday
+      },
+      basePct() {
+        return -100 + this.dayCenterOffsetPct(); // -100% is the middle panel
       },
 
       renderScripts(){
