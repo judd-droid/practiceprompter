@@ -38,6 +38,11 @@
     .icon-btn{border:none; background:#fff; border:1px solid var(--line); width:36px; height:36px; border-radius:10px; display:grid; place-items:center; box-shadow:var(--shadow); cursor:pointer}
     .gear{width:18px; height:18px; color:var(--sn-gray)}
 
+    .meta-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:10px 0 2px}
+    .meta-card{background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; box-shadow:var(--shadow)}
+    .meta-tag{font-size:12px; color:var(--sn-gray)}
+    .meta-value{font-size:22px; font-weight:800; letter-spacing:.2px; margin-top:4px; word-break:break-word}
+
     /* -------------------------------------------------- Day scroller */
     .date-wrap{margin:12px 0 4px}
     .month-row{display:flex; align-items:center; justify-content:space-between; color:var(--sn-gray); font-weight:600; font-size:14px}
@@ -122,11 +127,17 @@
       <div id="days" class="days" role="tablist" aria-label="Practice days"></div>
     </section>
 
-    <!-- Prospect Name -->
-    <section class="prospect">
-      <span class="tag">Today’s Prospect</span>
+    <!-- Prospect + Scenario (2-column) -->
+    <section class="meta-grid">
+      <div class="meta-card">
+        <div class="meta-tag">Today’s Prospect</div>
+        <div class="meta-value" id="prospectName">“Benjie”</div>
+      </div>
+      <div class="meta-card">
+        <div class="meta-tag">Practice Scenario</div>
+        <div class="meta-value" id="scenarioName">—</div>
+      </div>
     </section>
-    <div class="prospect-name" id="prospectName">“Benjie”</div>
 
     <!-- Scripts -->
     <div class="card" id="cardProspect" aria-live="polite">
@@ -337,10 +348,16 @@
             };
           }
           // Lock sheet name & attach steps
-          if (rec.prospect && String(rec.prospect).trim()) {
+          if (rec.prospect && String(rec.prospect).trim()){
             this.state.daily[iso].prospect = String(rec.prospect).trim();
             this.state.daily[iso]._lockedProspect = true;
           }
+          
+          // NEW: attach scenario text (if present)
+          if (rec.scenario && String(rec.scenario).trim()){
+            this.state.daily[iso].scenario = String(rec.scenario).trim();
+          }
+          
           this.state.daily[iso]._steps = Array.isArray(rec.steps) ? rec.steps : [];
         });
       
@@ -482,6 +499,9 @@
           $('#stepsList').innerHTML = '';
           return;
         }
+
+        $('#prospectName').textContent = `“${d.prospect}”`;
+        $('#scenarioName').textContent = d.scenario && d.scenario.trim() ? d.scenario.trim() : '—';
         
         $('#prospectName').textContent = `“${d.prospect}”`;
         const steps = this.currentSteps();
