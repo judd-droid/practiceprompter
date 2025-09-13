@@ -200,7 +200,14 @@
        Remote data loader (Google Apps Script JSON) + M/W/F UI
     -------------------------------------------------- */
     const $ = sel => document.querySelector(sel);
-    const fmtISO = d => d.toISOString().slice(0,10);
+    const fmtISO = d => {
+      // local-time YYYY-MM-DD (no UTC shift)
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${dd}`;
+    };
+
     const clamp = (n,min,max)=> Math.max(min, Math.min(max,n));
 
     const PROSPECT_NAMES = [
