@@ -619,6 +619,9 @@
       
         track.style.transition = 'none';
         track.style.transform  = 'translateX(-100%)';
+
+        this.attachDaysDrag();
+        
         requestAnimationFrame(()=> track.style.transition = 'transform .28s ease');
       },
       
