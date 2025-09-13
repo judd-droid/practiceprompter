@@ -41,13 +41,13 @@
       border-bottom:1px solid var(--line);
     }
     
-    /* Logo: no shadows/borders, block-level, zero line-height */
+    /* Smaller, still responsive header logo */
     .header .logo{
       display:block;
-      margin:0 auto;
-      max-height: clamp(110px, 18vw, 140px);
-      height:auto !important;     /* overrides any attributes */
+      margin:2px auto 4px;
+      max-height: clamp(56px, 9vw, 84px);  /* ↓ was 96–128px */
       width:auto !important;
+      height:auto !important;
       object-fit:contain;
       background:none !important;
       border:none !important;
