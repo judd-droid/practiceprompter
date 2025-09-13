@@ -177,7 +177,7 @@
       <div class="role"><span class="avatar you"></span> You</div>
       <div class="script" id="lineAdvisor">Hi Benjie, this is Jen from AIA. Do you have a quick minute?</div>
       <div class="progress">
-        <div>Step <b id="stepNow">1</b> / <b>20</b></div>
+        <div>Step <b id="stepNow">1</b> / <b id="stepTotal">20</b></div>
         <div class="bar" aria-hidden="true"><i id="bar"></i></div>
       </div>
     </div>
@@ -331,6 +331,18 @@
       return out;
     }
 
+    // Treat rows like "—", "--", "___" or blank as empty
+    function isNullishCell(v) {
+      const t = String(v ?? '').trim();
+      return !t || /^[-–—_]+$/.test(t);
+    }
+    
+    function cleanSteps(arr) {
+      const steps = Array.isArray(arr) ? arr : [];
+      // keep rows where either P or A has real content
+      return steps.filter(s => !(isNullishCell(s.p) && isNullishCell(s.a)));
+    }
+
     const app = {
       state: { advisor:'Jen', selected: new Date(), daily:{} },
       remote: {},
@@ -388,7 +400,12 @@
             this.state.daily[iso].scenario = String(rec.scenario).trim();
           }
           
-          this.state.daily[iso]._steps = Array.isArray(rec.steps) ? rec.steps : [];
+          this.state.daily[iso]._steps = cleanSteps(rec.steps);
+
+          // If the saved step is now out of range (because we trimmed),
+          // pull it back to the last valid step
+          const max = this.state.daily[iso]._steps.length || 1;
+          this.state.daily[iso].step = Math.min(this.state.daily[iso].step || 1, max);
         });
       
         // sort and keep only non-future for navigation
@@ -535,14 +552,38 @@
         $('#scenarioName').title = d.scenario || '';
         
         $('#prospectName').textContent = cleanName(d.prospect);
+        
         const steps = this.currentSteps();
-        const pair = expandFromArray(steps, d.step, d.prospect);
-        $('#lineProspect').textContent = pair.p;
-        $('#lineAdvisor').textContent = pair.a;
-        $('#stepNow').textContent = d.step;
-        const pct = (d.step-1)/Math.max(1,(steps.length-1))*100; $('#bar').style.width = pct+'%';
-        $('#btnBack').disabled = d.step<=1;
-        $('#btnNext').disabled = d.step>=steps.length;
+        
+        // Handle case where, after trimming, there are no steps
+        if (!steps.length) {
+          $('#prospectName').textContent = d.prospect;
+          $('#lineProspect').textContent = 'No practice lines for this date.';
+          $('#lineAdvisor').textContent  = '';
+          $('#stepNow').textContent = '0';
+          $('#stepTotal').textContent = '0';
+          $('#bar').style.width = '0%';
+          $('#btnBack').disabled = true;
+          $('#btnNext').disabled = true;
+          $('#stepsList').innerHTML = '';
+          return;
+        }
+        
+        // Make sure current step never exceeds the new length
+        if (d.step > steps.length) { d.step = steps.length; storage.save(this.state); }
+        
+        const pair = expandFromArray(steps, d.step, d.prospect, this.state.advisor||'Jen');
+        $('#lineProspect').textContent = pair.p || '—';
+        $('#lineAdvisor').textContent  = pair.a || '—';
+        
+        $('#stepNow').textContent   = d.step;
+        $('#stepTotal').textContent = steps.length;
+        
+        const pct = (d.step-1)/Math.max(1,(steps.length-1))*100;
+        $('#bar').style.width = pct+'%';
+        
+        $('#btnBack').disabled = d.step <= 1;
+        $('#btnNext').disabled = d.step >= steps.length;
 
         const list = $('#stepsList'); 
         list.innerHTML = '';
