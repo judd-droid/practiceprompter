@@ -438,7 +438,8 @@
     }
 
     const app = {
-      state: { advisor:'Jen', selected: new Date(), daily:{} },
+      state: { advisor:'Jen', selected:new Date(), daily:{}, slot: 0 },
+
       remote: {},
       async init(){
         const saved = storage.load();
@@ -618,9 +619,8 @@
         track.appendChild(this.buildWeekPanel(nextStart));
       
         track.style.transition = 'none';
-        track.style.transform  = `translateX(${this.basePct()}%)`;  // <— use base
-        this.attachDaysDrag();                                      // keep this
-      
+        track.style.transform  = `translateX(${this.basePct()}%)`;
+        this.attachDaysDrag(); // keep this
         requestAnimationFrame(()=> track.style.transition = 'transform .28s ease');
       },
       
@@ -661,23 +661,24 @@
       
         const candidate = addDays(this.state.selected, dir*7);
         const allowed   = this.nearestValidNotAfter(candidate);
-        const base      = this.basePct();
+        const startBase = this.basePct();
       
         if (!allowed || fmtISO(allowed) === fmtISO(this.state.selected)) {
-          // bounce a little around the base
+          // bounce around current base
           track.style.transition = 'transform .15s ease';
-          track.style.transform  = `translateX(${base + (dir===1?-10:10)}%)`;
+          track.style.transform  = `translateX(${startBase + (dir===1?-10:10)}%)`;
           setTimeout(()=>{
             track.style.transition = 'transform .15s ease';
-            track.style.transform  = `translateX(${base}%)`;
+            track.style.transform  = `translateX(${startBase}%)`;
           }, 140);
           return;
         }
       
-        // animate exactly one panel from wherever the base is
-        track.style.transform = `translateX(${base + (dir===1 ? -100 : 100)}%)`;
+        // move exactly one panel from current base
+        track.style.transform = `translateX(${startBase + (dir===1 ? -100 : 100)}%)`;
         track.addEventListener('transitionend', () => {
           this.state.selected = allowed;
+          // keep this.state.slot as-is, so the same left/center/right "spot" persists
           storage.save(this.state);
           this.renderWeek();
           this.renderScripts();
@@ -689,11 +690,11 @@
         const track = document.getElementById('daysTrack');
         if (!wrap || !track) return;
       
-        let active = false, startX = 0, dx = 0, width = wrap.clientWidth, base = this.basePct();
+        let active = false, startX = 0, dx = 0, width = wrap.clientWidth, startBase = this.basePct();
       
         const onStart = (x) => {
           active = true; startX = x; dx = 0; width = wrap.clientWidth;
-          base = this.basePct();                           // <— recompute base
+          startBase = this.basePct();               // base including current slot
           track.classList.add('dragging');
           track.style.transition = 'none';
         };
@@ -701,24 +702,30 @@
         const onMove = (x) => {
           if (!active) return;
           dx = x - startX;
-          const pct = (dx / width) * 100;                 // how much of a panel we moved
-          track.style.transform = `translateX(${base + pct}%)`;
+          const pct = (dx / width) * 100;           // drag amount in % of panel
+          track.style.transform = `translateX(${startBase + pct}%)`;
         };
       
         const onEnd = () => {
           if (!active) return;
           active = false; track.classList.remove('dragging');
       
-          const THRESH = width * 0.18;
-          const dir = Math.abs(dx) > THRESH ? (dx < 0 ? +1 : -1) : 0;
-      
-          if (dir === 0) {
-            track.style.transition = 'transform .25s ease';
-            track.style.transform  = `translateX(${base}%)`;       // snap back to base
-          } else {
+          const WEEK_THRESH = width * 0.18;         // drag ~18% to change week
+          if (Math.abs(dx) > WEEK_THRESH) {
+            // let slideWeek animate a 1-panel move from current visual base
             track.style.transition = 'transform .28s ease';
-            this.slideWeek(dir);                                    // commit
+            this.slideWeek(dx < 0 ? +1 : -1);
+            dx = 0;
+            return;
           }
+      
+          // Snap to nearest slot (each slot is 1/3 of panel)
+          const deltaSlots = Math.round((dx / width) * 3); // −2..+2 typically
+          this.state.slot = Math.max(-2, Math.min(2, (this.state.slot || 0) + deltaSlots));
+      
+          track.style.transition = 'transform .25s ease';
+          track.style.transform  = `translateX(${this.basePct()}%)`;
+          storage.save(this.state);
           dx = 0;
         };
       
@@ -742,6 +749,19 @@
       basePct() {
         return -100 + this.dayCenterOffsetPct(); // -100% is the middle panel
       },
+
+      slotWidthPct: 33.3333,
+      dayCenterOffsetPct(d = this.state.selected) {
+        const dow = d.getDay();         // Mon=1 ... Fri=5
+        if (dow === 1) return  33.3333; // center Monday
+        if (dow === 5) return -33.3333; // center Friday
+        return 0;                        // center Wednesday
+      },
+      basePct() {
+        // panel center (-100%) + which day to center + which slot (L=−1,C=0,R=+1; allow ±2)
+        return -100 + this.dayCenterOffsetPct() + (this.state.slot || 0) * this.slotWidthPct;
+      },
+
 
       renderScripts(){
         const key = fmtISO(this.state.selected);
