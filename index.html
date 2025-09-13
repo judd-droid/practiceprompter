@@ -339,20 +339,6 @@
 
     const clamp = (n,min,max)=> Math.max(min, Math.min(max,n));
 
-    // helper
-    const weekStart = (d)=> startOfWeekMon(atMidnight(d));
-    
-      // Animate to the side…
-      track.style.transform = `translateX(${dir===1?-200:0}%)`;
-      track.addEventListener('transitionend', () => {
-        // …then commit the new selection and rebuild 3 fresh panels
-        this.state.selected = allowed;
-        storage.save(this.state);
-        this.renderWeek();        // rebuilds prev|current|next and centers again
-        this.renderScripts();
-      }, { once: true });
-    };
-
     const PROSPECT_NAMES = [
       'Benjie','Mara','Paolo','Ava','Rico','Shiela','Anton','Grace','Loren','JR',
       'Allan','Sandy','Gio','Migs','Kara','Dane','Rhea','Gail','Ivan','Nika'
@@ -563,19 +549,27 @@
         this.renderWeek();
       },
       bind(){
-        $('#btnBack').addEventListener('click',()=> this.setStep(this.day.step-1));
-        $('#btnNext').addEventListener('click',()=> this.setStep(this.day.step+1));
-        $('#btnList').addEventListener('click',()=> $('#dlg').showModal());
-        $('#btnRestart').addEventListener('click',()=>{ this.setStep(1); $('#dlg').close();});
-        $('#btnMarkDone').addEventListener('click',()=>{ this.day.done=true; this.day.step=this.currentSteps().length; storage.save(this.state); this.renderScripts(); this.renderDays(); $('#dlg').close(); });
+        $('#btnBack').addEventListener('click', ()=> this.setStep(this.day.step-1));
+        $('#btnNext').addEventListener('click', ()=> this.setStep(this.day.step+1));
+        $('#btnList').addEventListener('click', ()=> $('#dlg').showModal());
+        $('#btnRestart').addEventListener('click', ()=>{ this.setStep(1); $('#dlg').close(); });
+        $('#btnMarkDone').addEventListener('click', ()=>{
+          this.day.done = true;
+          this.day.step = this.currentSteps().length;
+          storage.save(this.state);
+          this.renderScripts();
+          this.renderWeek(); // ← was renderDays()
+          $('#dlg').close();
+        });
         $('#btnSettings').addEventListener('click', () => {
           if (confirm('Reset local progress?')) { localStorage.clear(); location.reload(); }
         });
-        
-        // Buttons → slide
-        $('#prevWeek').addEventListener('click', () => app.slideWeek(-1));
-        $('#nextWeek').addEventListener('click', () => app.slideWeek(1));
-
+      
+        // arrows → slide
+        $('#prevWeek').addEventListener('click', () => this.slideWeek(-1));
+        $('#nextWeek').addEventListener('click', () => this.slideWeek(1));
+      
+        // swipe → slide
         (() => {
           const area = document.querySelector('.date-wrap');
           if (!area) return;
@@ -594,6 +588,7 @@
           area.addEventListener('pointerdown', e=> start(e.clientX, e.clientY));
           area.addEventListener('pointerup',   e=> end(e.clientX, e.clientY));
         })();
+      }
       
       // Swipe → slide (reuse your existing detector, just call slideWeek)
       (function enableWeekSwipe(){
@@ -795,35 +790,6 @@
     // Boot
     app.init();
     window.__snpp = app;
-  
-    // Simple horizontal swipe → prev/next week
-    (function enableWeekSwipe(){
-      const areas = [document.querySelector('.date-wrap'), document.getElementById('days')].filter(Boolean);
-      const THRESH_X = 40;   // px required horizontally
-      const LIMIT_Y  = 60;   // ignore if mostly vertical
-    
-      areas.forEach(area=>{
-        let sx=0, sy=0, tracking=false;
-    
-        const start = (x,y)=>{ sx=x; sy=y; tracking=true; };
-        const end   = (x,y)=>{
-          if(!tracking) return; tracking=false;
-          const dx=x-sx, dy=y-sy;
-          if(Math.abs(dx) > THRESH_X && Math.abs(dy) < LIMIT_Y){
-            if(dx < 0) document.getElementById('nextWeek')?.click();   // swipe left → next
-            else       document.getElementById('prevWeek')?.click();   // swipe right → prev
-          }
-        };
-    
-        // Touch (mobile)
-        area.addEventListener('touchstart', e=> start(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
-        area.addEventListener('touchend',   e=> end(e.changedTouches[0].clientX, e.changedTouches[0].clientY), {passive:true});
-    
-        // Pointer (mouse + touch fallback)
-        area.addEventListener('pointerdown', e=> start(e.clientX, e.clientY));
-        area.addEventListener('pointerup',   e=> end(e.clientX, e.clientY));
-      });
-    })();
 
   </script>
 </body>
