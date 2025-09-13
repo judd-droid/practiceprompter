@@ -664,7 +664,6 @@
         const startBase = this.basePct();
       
         if (!allowed || fmtISO(allowed) === fmtISO(this.state.selected)) {
-          // bounce around current base
           track.style.transition = 'transform .15s ease';
           track.style.transform  = `translateX(${startBase + (dir===1?-10:10)}%)`;
           setTimeout(()=>{
@@ -674,11 +673,10 @@
           return;
         }
       
-        // move exactly one panel from current base
         track.style.transform = `translateX(${startBase + (dir===1 ? -100 : 100)}%)`;
         track.addEventListener('transitionend', () => {
           this.state.selected = allowed;
-          // keep this.state.slot as-is, so the same left/center/right "spot" persists
+          // keep this.state.slot as-is so the same left/center/right spot persists
           storage.save(this.state);
           this.renderWeek();
           this.renderScripts();
@@ -709,20 +707,24 @@
         const onEnd = () => {
           if (!active) return;
           active = false; track.classList.remove('dragging');
-      
-          const WEEK_THRESH = width * 0.18;         // drag ~18% to change week
+        
+          const WEEK_THRESH = width * 0.18;   // swipe >= ~18% → change week
           if (Math.abs(dx) > WEEK_THRESH) {
-            // let slideWeek animate a 1-panel move from current visual base
             track.style.transition = 'transform .28s ease';
             this.slideWeek(dx < 0 ? +1 : -1);
             dx = 0;
             return;
           }
-      
-          // Snap to nearest slot (each slot is 1/3 of panel)
-          const deltaSlots = Math.round((dx / width) * 3); // −2..+2 typically
-          this.state.slot = Math.max(-2, Math.min(2, (this.state.slot || 0) + deltaSlots));
-      
+        
+          // In-week snap: at most ONE column per release
+          const COL_THRESH = width * 0.12;    // require ~12% to move a column
+          let cols = 0;
+          if (dx >  COL_THRESH) cols = +1;    // move content right → viewport sees items shift left
+          if (dx < -COL_THRESH) cols = -1;
+        
+          // clamp slot to [-1, +1]
+          this.state.slot = Math.max(-1, Math.min(1, (this.state.slot || 0) + cols));
+        
           track.style.transition = 'transform .25s ease';
           track.style.transform  = `translateX(${this.basePct()}%)`;
           storage.save(this.state);
