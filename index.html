@@ -46,7 +46,7 @@
       display:block;
       margin:0 auto;                       /* perfectly centered */
       line-height:0;                       /* removes stray baseline gap */
-      max-height:180px;                     /* less vertical demand */
+      max-height: clamp(96px, 16vw, 128px); /* was 90px */
       width:auto;                          /* preserve aspect ratio */
       object-fit:contain;
       background:none !important;
