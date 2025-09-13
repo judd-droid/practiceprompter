@@ -143,6 +143,30 @@
     .month-row{display:flex; align-items:center; justify-content:space-between; color:var(--sn-gray); font-weight:600; font-size:14px}
     .arrow{border:none; background:transparent; color:var(--sn-gray); font-size:20px; padding:6px 10px; cursor:pointer}
 
+    /* OLD .days rules become a viewport (no grid here) */
+    .days{
+      position: relative;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    
+    /* Sliding rail that holds 3 week panels: prev | current | next */
+    .days-track{
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 100%;
+      transition: transform .28s ease;
+      will-change: transform;
+    }
+    
+    /* Each panel is the 3 day cards for that week */
+    .week{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 0 2px;      /* tiny breathing room on edges */
+    }
+    
     .days{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px}
     .day{position:relative; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px 6px 18px; text-align:center; box-shadow:var(--shadow); cursor:pointer; user-select:none}
     .day .dow{display:block; font-size:10px; color:var(--sn-gray)}
@@ -315,6 +339,103 @@
     };
 
     const clamp = (n,min,max)=> Math.max(min, Math.min(max,n));
+
+    // helper
+const weekStart = (d)=> startOfWeekMon(atMidnight(d));
+
+// REPLACE app.renderWeek + app.renderDays with the two functions below:
+app.renderWeek = function(){
+  const d = this.state.selected;
+  const month = d.toLocaleDateString(undefined,{month:'long', year:'numeric'});
+  $('#monthLabel').textContent = month;
+  this.renderDaysStrip();
+};
+
+app.renderDaysStrip = function(){
+  const wrap = $('#days');
+  wrap.innerHTML = '';                 // create/refresh the sliding track
+  const track = document.createElement('div');
+  track.id = 'daysTrack';
+  track.className = 'days-track';
+  wrap.appendChild(track);
+
+  const curStart  = weekStart(this.state.selected);
+  const prevStart = addDays(curStart, -7);
+  const nextStart = addDays(curStart,  7);
+
+  // build three panels: prev | current | next
+  track.appendChild(this.buildWeekPanel(prevStart));
+  track.appendChild(this.buildWeekPanel(curStart));
+  track.appendChild(this.buildWeekPanel(nextStart));
+
+  // show the middle panel
+  track.style.transition = 'none';
+  track.style.transform = 'translateX(-100%)';
+  requestAnimationFrame(()=> track.style.transition = 'transform .28s ease');
+};
+
+// Build one week's 3 day buttons
+app.buildWeekPanel = function(startDate){
+  const panel = document.createElement('div');
+  panel.className = 'week';
+  [0,2,4].forEach(off=>{
+    const t = addDays(startDate, off);
+    const key = fmtISO(t);
+    const hasData  = this.validSet && this.validSet.has(key);
+    const isFuture = isFutureDate(t);
+    const disabled = !hasData || isFuture;
+    const isCurrent= sameDay(t, this.state.selected);
+    const done     = hasData && this.state.daily[key] && this.state.daily[key].done;
+
+    const el = document.createElement('button');
+    el.className = 'day ' + (disabled?'future':'past') + (isCurrent?' current':'');
+    el.innerHTML = `
+      <span class="dow">${t.toLocaleDateString(undefined,{weekday:'short'})}</span>
+      <span class="num">${t.getDate()}</span>
+      <span class="check ${done?'ok':'pending'}">${done?'✓':''}</span>
+    `;
+    if (!disabled) {
+      el.onclick = () => {
+        this.state.selected = t;
+        storage.save(this.state);
+        this.renderWeek(); this.renderScripts();
+      };
+    }
+    panel.appendChild(el);
+  });
+  return panel;
+};
+
+    // Slide with animation; dir = -1 (prev) or +1 (next)
+    app.slideWeek = function(dir){
+      const track = document.getElementById('daysTrack');
+      if (!track) return;
+    
+      // Where user *wants* to go
+      const candidate = addDays(this.state.selected, dir*7);
+      const allowed   = this.nearestValidNotAfter(candidate);
+    
+      // If nothing newer/older is allowed, give a tiny "bounce"
+      if (!allowed || fmtISO(allowed) === fmtISO(this.state.selected)) {
+        track.style.transition = 'transform .15s ease';
+        track.style.transform  = `translateX(${dir===1?-110:-90}%)`;
+        setTimeout(()=>{
+          track.style.transition = 'transform .15s ease';
+          track.style.transform  = 'translateX(-100%)';
+        }, 140);
+        return;
+      }
+    
+      // Animate to the side…
+      track.style.transform = `translateX(${dir===1?-200:0}%)`;
+      track.addEventListener('transitionend', () => {
+        // …then commit the new selection and rebuild 3 fresh panels
+        this.state.selected = allowed;
+        storage.save(this.state);
+        this.renderWeek();        // rebuilds prev|current|next and centers again
+        this.renderScripts();
+      }, { once: true });
+    };
 
     const PROSPECT_NAMES = [
       'Benjie','Mara','Paolo','Ava','Rico','Shiela','Anton','Grace','Loren','JR',
@@ -533,21 +654,32 @@
         $('#btnSettings').addEventListener('click', () => {
           if (confirm('Reset local progress?')) { localStorage.clear(); location.reload(); }
         });
-        $('#prevWeek').addEventListener('click', () => {
-          const prev = this.prevValid(this.state.selected);
-          if (!prev) return;                               // no earlier sheet date
-          this.state.selected = prev;
-          storage.save(this.state);
-          this.renderWeek(); this.renderScripts();
-        });
         
-        $('#nextWeek').addEventListener('click', () => {
-          const next = this.nextValid(this.state.selected);
-          if (!next) return;                               // either none or future-only
-          this.state.selected = next;
-          storage.save(this.state);
-          this.renderWeek(); this.renderScripts();
-        });
+      // Buttons → slide
+      $('#prevWeek').addEventListener('click', () => app.slideWeek(-1));
+      $('#nextWeek').addEventListener('click', () => app.slideWeek(1));
+      
+      // Swipe → slide (reuse your existing detector, just call slideWeek)
+      (function enableWeekSwipe(){
+        const area = document.querySelector('.date-wrap');
+        if (!area) return;
+        const THRESH_X = 40, LIMIT_Y = 60;
+        let sx=0, sy=0, tracking=false;
+      
+        const start = (x,y)=>{ sx=x; sy=y; tracking=true; };
+        const end   = (x,y)=>{
+          if(!tracking) return; tracking=false;
+          const dx=x-sx, dy=y-sy;
+          if(Math.abs(dx)>THRESH_X && Math.abs(dy)<LIMIT_Y){
+            if(dx<0) app.slideWeek(1); else app.slideWeek(-1);
+          }
+        };
+        area.addEventListener('touchstart', e=> start(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+        area.addEventListener('touchend',   e=> end(e.changedTouches[0].clientX, e.changedTouches[0].clientY), {passive:true});
+        area.addEventListener('pointerdown', e=> start(e.clientX, e.clientY));
+        area.addEventListener('pointerup',   e=> end(e.clientX, e.clientY));
+      })();
+
       },
       snapToMWF(){ if(!isMWF(this.state.selected)){ const sw=startOfWeekMon(this.state.selected); const opts=[sw, addDays(sw,2), addDays(sw,4)]; this.state.selected = nearestOf(this.state.selected, opts); } },
       renderWeek(){
