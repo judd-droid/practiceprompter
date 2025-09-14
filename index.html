@@ -683,87 +683,115 @@
 
       attachDaysDrag(){
         const wrap = document.getElementById('days');
-        if (!wrap) return;
+        const track = document.getElementById('daysTrack');
+        if (!wrap || !track) return;
       
-        // Unbind any previous handlers for a fresh track each render
+        // Clean up old listeners if this gets called again
         if (this._dragAbort) this._dragAbort.abort();
         this._dragAbort = new AbortController();
         const { signal } = this._dragAbort;
       
-        // Always read the current track (it gets re-created on render)
-        const trackNow = () => document.getElementById('daysTrack');
+        let startX = 0;
+        let dx = 0;
+        let startBasePct = 0;
+        let startSlot = this.state.slot || 0; // -1,0,+1 (Mon,Wed,Fri)
+        let refSlot = 0;                       // -2..+2 (which slot finger "grabs")
       
-        let active = false, startX = 0, dx = 0, width = wrap.clientWidth, startBase = 0;
-        const pxPerSlot = () => wrap.clientWidth / 3;
+        const slotWpx = () => wrap.clientWidth / 3;
       
         const onStart = (x) => {
-          active = true; startX = x; dx = 0; width = wrap.clientWidth; startBase = this.basePct();
-          const tr = trackNow();
-          if (tr) { tr.classList.add('dragging'); tr.style.transition = 'none'; }
+          startX = x;
+          dx = 0;
+          startSlot = this.state.slot || 0;
+          startBasePct = this.basePct();
+          refSlot = this.slotFromX(x, wrap);   // choose the closest of -2..+2
+          track.classList.add('dragging');
+          track.style.transition = 'none';
         };
       
         const onMove = (x) => {
-          if (!active) return;
           dx = x - startX;
-          const tr = trackNow();
-          if (tr) tr.style.transform = `translateX(${startBase + (dx / width) * 100}%)`;
+          const deltaSlots = dx / slotWpx();                       // how many slot widths we dragged
+          const pct = startBasePct + deltaSlots * this.slotWidthPct;
+          track.style.transform = `translateX(${pct}%)`;           // follow the finger
         };
       
-        const onEnd = () => {
-          if (!active) return; active = false;
-          const tr = trackNow();
-          if (tr) tr.classList.remove('dragging');
+        const onEnd = (x) => {
+          track.classList.remove('dragging');
       
-          const steps = Math.round(dx / pxPerSlot()); // -2..+2 typically
+          // Where did the finger end relative to the 5 slots?
+          const endSlot = this.slotFromX(x ?? (startX + dx), wrap); // -2..+2
+          const step = endSlot - refSlot;                           // slots moved from the anchor
+          let candidate = startSlot + step;                         // can be < -1 or > +1
       
-          if (Math.abs(steps) >= 3) {                 // overshoot → week swipe
-            this.state.slot = 0;
+          // Wrap across weeks if we overshot left/right edge
+          if (candidate < -1) {
+            // e.g. from Mon(-1) moving 1 left -> candidate -2 -> prev week, becomes Fri(+1)
+            candidate += 3;                     // map into [-1,0,+1]
+            this.state.slot = candidate;
             storage.save(this.state);
-            this.slideWeek(dx > 0 ? -1 : +1);
-          } else {
-            const before = this.state.slot || 0;
-            let after = clamp(before + steps, -2, 2);
-            const overflow = (before + steps) - after;
-      
-            if (overflow !== 0) {                     // hit an edge → week swipe
-              this.state.slot = 0; storage.save(this.state);
-              this.slideWeek(overflow > 0 ? -1 : +1);
-            } else {
-              this.state.slot = after; storage.save(this.state);
-              if (tr) {
-                tr.style.transition = 'transform .25s ease';
-                tr.style.transform  = `translateX(${this.basePct()}%)`;
-              }
-            }
+            this.slideWeek(-1);                 // previous week
+            return;
           }
-          dx = 0;
+          if (candidate > 1) {
+            // e.g. from Fri(+1) moving 1 right -> candidate +2 -> next week, becomes Mon(-1)
+            candidate -= 3;                     // map into [-1,0,+1]
+            this.state.slot = candidate;
+            storage.save(this.state);
+            this.slideWeek(+1);                 // next week
+            return;
+          }
+      
+          // Stayed within the 3 visible dates => snap to the nearest of (L,C,R)
+          this.state.slot = candidate;          // -1, 0, or +1
+          storage.save(this.state);
+          this.applyTransform(this.basePct(), true);
         };
       
-        // Prefer Pointer Events; only add Touch fallback if not supported
+        // Pointer Events (mouse + touch)
         wrap.addEventListener('pointerdown', e => { if (e.button!==0) return; onStart(e.clientX); }, { signal });
         window.addEventListener('pointermove', e => onMove(e.clientX), { signal });
-        window.addEventListener('pointerup',   onEnd,                  { signal });
+        window.addEventListener('pointerup',   e => onEnd(e.clientX),  { signal });
       
+        // Older iOS (fallback)
         if (!('PointerEvent' in window)) {
-          wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX), { passive: true, signal });
-          wrap.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  { passive: true, signal });
-          wrap.addEventListener('touchend',   onEnd,                               { signal });
+          wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX), { passive:true, signal });
+          wrap.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  { passive:true, signal });
+          wrap.addEventListener('touchend',   () => onEnd(),                      { signal });
         }
       },
 
       // default state (add slot: 0)
       state: { advisor: 'Jen', selected: new Date(), slot: 0, daily: {} },
       
-      slotWidthPct: 33.3333,                   // one column = 33.333%
+      slotWidthPct: 33.3333, // width of a single date card as % of the track
       dayCenterOffsetPct(d = this.state.selected) {
-        const dow = d.getDay();                // Mon=1, Wed=3, Fri=5
-        return dow === 1 ?  33.3333            // center Monday
-             : dow === 5 ? -33.3333            // center Friday
-             : 0;                              // center Wednesday
+        const dow = d.getDay();         // Mon=1..Fri=5
+        if (dow === 1) return  33.3333; // center Monday
+        if (dow === 5) return -33.3333; // center Friday
+        return 0;                       // center Wednesday
       },
       basePct() {
-        // middle panel (-100%) + which day is centered + which slot (L=-2,-1,C=0,R=+1,+2)
+        // Middle panel (-100%) + which day to center + which visual slot (Mon/Wed/Fri -> -1/0/+1)
         return -100 + this.dayCenterOffsetPct() + (this.state.slot || 0) * this.slotWidthPct;
+      },
+      
+      // px → slot index in [-2,-1,0,1,2] relative to strip center
+      slotFromX(clientX, wrap) {
+        const rect = wrap.getBoundingClientRect();
+        const w = rect.width;
+        const rel = clientX - rect.left;         // px within the strip
+        const center = w / 2;
+        const slotW = w / 3;                     // 3 visible cards
+        const idx = Math.round((rel - center) / slotW);
+        return clamp(idx, -2, 2);
+      },
+      
+      applyTransform(pct, animate = false) {
+        const track = document.getElementById('daysTrack');
+        if (!track) return;
+        track.style.transition = animate ? 'transform .25s ease' : 'none';
+        track.style.transform  = `translateX(${pct}%)`;
       },
 
       renderScripts(){
